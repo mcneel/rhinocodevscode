@@ -19,7 +19,17 @@
 				"command": "rhinocode.runinrhino",
 				"title": "Run In Rhino"
 			}
-		]
+		],
+		"configuration": {
+			"title": "RhinoCode",
+			"properties": {
+				"rhinocode.rhinoInstallPath": {
+					"type": "string",
+					"default": "",
+					"description": "Full install path of Rhino on your machine"
+				}
+			}
+		}
 	},
 	"scripts": {
 		"vscode:prepublish": "npm run compile",

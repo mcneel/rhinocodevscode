@@ -1,35 +1,26 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
 
 import cp = require('child_process');
+import internal = require('stream');
+import os = require('os');
+import path = require('path');
+import fs = require('fs')
 
-// this method is called when your extension is activated
-// your extension is activated the very first time the command is executed
+// this method is called when extension is activated
 export function activate(context: vscode.ExtensionContext) {
-
-	// Use the console to output diagnostic information (console.log) and errors (console.error)
-	// This line of code will only be executed once when your extension is activated
-	// console.log('Congratulations, your extension "rhinocode" is now active!');
-
-	// The command has been defined in the package.json file
-	// Now provide the implementation of the command with registerCommand
-	// The commandId parameter must match the command field in package.json
 	let disposable = vscode.commands.registerCommand('rhinocode.runinrhino', () => {
-		// The code you place here will be executed every time your command is executed
-		// Display a message box to the user
-		vscode.window.showQuickPick(["Rhino 8 (this doc)", "Rhino 8 (other doc)"], { canPickMany: false })
+		const rhinos = getRhinoInstances();
+		const names = new Map(
+			rhinos.map(r =>
+				[`Rhino ${r.processId} - [${r.activeDoc.title} @ ${r.activeDoc.location}]`, r]
+			)
+		);
+		vscode.window.showQuickPick([...names.keys()], { canPickMany: false })
 			.then((v) => {
 				if (v != undefined) {
-					vscode.window.showInformationMessage(`Chose ${v} option`);
-
-					cp.exec('pwd', (err, stdout, stderr) => {
-						console.log('stdout: ' + stdout);
-						console.log('stderr: ' + stderr);
-						if (err) {
-							console.log('error: ' + err);
-						}
-					});
+					const rhino = names.get(v);
+					const activeFile = vscode.window.activeTextEditor?.document.uri.path;
+					const stdout = cp.execSync(`${getRhinoCode()} --rhino ${rhino?.pipeId} script ${activeFile}`);
 				}
 			});
 	});
@@ -37,5 +28,77 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(disposable);
 }
 
-// this method is called when your extension is deactivated
+// this method is called when extension is deactivated
 export function deactivate() { }
+
+
+interface RhinoInstance {
+	readonly processId: number;
+	readonly pipeId: string;
+	readonly activeDoc: RhinoDocument;
+}
+
+interface RhinoDocument {
+	readonly title: string;
+	readonly location: string;
+}
+
+function getRhinoInstances(): Array<RhinoInstance> {
+	const rhinos: Array<RhinoInstance> = [];
+
+	const rc = getRhinoCode();
+	if (rc != undefined) {
+		const stdout = cp.execSync(`${rc} list`);
+
+		console.log('stdout: ' + stdout);
+
+		const rhinoDefs = stdout.toString().trimEnd().split('\n').slice(1);
+		rhinoDefs.forEach(rd => {
+			const rdClean = rd.replace(/\s+/g, ' ').trim();
+			let [procId, pipeId, docTitle, docLoc] = rdClean.split(' ');
+			rhinos.push(
+				{
+					processId: parseInt(procId),
+					pipeId: pipeId,
+					activeDoc: {
+						title: docTitle,
+						location: docLoc
+					}
+				}
+			)
+		});
+	}
+	else {
+		vscode.window.showInformationMessage(
+			"Can not find rhinocode. Make sure Rhino install path is set in this extension settings"
+		);
+	}
+
+	return rhinos;
+}
+
+function getRhinoCode(): string | void {
+	let configs = vscode.workspace.getConfiguration('rhinocode');
+	let rhinoPath = configs.get<string>("rhinoInstallPath", "");
+	let rhinocodePath;
+	switch (os.platform()) {
+		case 'darwin':
+			rhinocodePath = `${rhinoPath}/Contents/Resources/bin/rhinocode`;
+			break;
+		case 'win32':
+			rhinocodePath = `${rhinoPath}/System/RhinoCode.exe`
+			break;
+	}
+
+	if (rhinocodePath != undefined) {
+		try {
+			rhinocodePath = path.normalize(rhinocodePath);
+			if (fs.statSync(rhinocodePath) != undefined) {
+				return rhinocodePath;
+			}
+		}
+		catch (_ex) {
+			console.log(`Error checking rhinocode path ${rhinocodePath} | ${_ex}`)
+		}
+	}
+}
