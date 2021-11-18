@@ -2,12 +2,24 @@
 	"name": "rhinocode",
 	"displayName": "RhinoCode",
 	"description": "RhinoCode interoperability extension",
+	"publisher": "Robert McNeel & Associates",
+	"license": "MIT",
+	"repository": {
+		"url": "https://github.com/mcneel/rhinocodevscode"
+	},
 	"version": "0.0.1",
+	"icon": "rhinocode.png",
 	"engines": {
 		"vscode": "^1.62.0"
 	},
 	"categories": [
+		"Programming Languages",
 		"Other"
+	],
+	"keywords": [
+		"rhino3d",
+		"rhinocode",
+		"rhinoscript"
 	],
 	"activationEvents": [
 		"onCommand:rhinocode.runinrhino"
@@ -17,7 +29,7 @@
 		"commands": [
 			{
 				"command": "rhinocode.runinrhino",
-				"title": "Run In Rhino"
+				"title": "Run In Rhino WIP"
 			}
 		],
 		"configuration": {
