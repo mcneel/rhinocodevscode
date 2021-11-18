@@ -9,20 +9,28 @@ import fs = require('fs')
 // this method is called when extension is activated
 export function activate(context: vscode.ExtensionContext) {
 	let disposable = vscode.commands.registerCommand('rhinocode.runinrhino', () => {
-		const rhinos = getRhinoInstances();
-		const names = new Map(
-			rhinos.map(r =>
-				[`Rhino ${r.processId} - [${r.activeDoc.title} @ ${r.activeDoc.location}]`, r]
-			)
-		);
-		vscode.window.showQuickPick([...names.keys()], { canPickMany: false })
-			.then((v) => {
-				if (v != undefined) {
-					const rhino = names.get(v);
-					const activeFile = vscode.window.activeTextEditor?.document.uri.path;
-					const stdout = cp.execSync(`${getRhinoCode()} --rhino ${rhino?.pipeId} script ${activeFile}`);
-				}
-			});
+		const activeFile = vscode.window.activeTextEditor?.document.uri.fsPath;
+		if (activeFile != undefined) {
+			const rhinos = getRhinoInstances();
+			const names = new Map(
+				rhinos.map(r =>
+					[`Rhino ${r.processId} - [${r.activeDoc.title} @ ${r.activeDoc.location}]`, r]
+				)
+			);
+			vscode.window.showQuickPick([...names.keys()], { canPickMany: false })
+				.then((v) => {
+					if (v != undefined) {
+						const rhino = names.get(v);
+
+						const stdout = cp.execSync(`${getRhinoCode()} --rhino ${rhino?.pipeId} script \"${activeFile}\"`);
+					}
+				});
+		}
+		else {
+			vscode.window.showInformationMessage(
+				"There are no active scripts open"
+			);
+		}
 	});
 
 	context.subscriptions.push(disposable);
@@ -30,7 +38,6 @@ export function activate(context: vscode.ExtensionContext) {
 
 // this method is called when extension is deactivated
 export function deactivate() { }
-
 
 interface RhinoInstance {
 	readonly processId: number;
@@ -79,26 +86,33 @@ function getRhinoInstances(): Array<RhinoInstance> {
 
 function getRhinoCode(): string | void {
 	let configs = vscode.workspace.getConfiguration('rhinocode');
-	let rhinoPath = configs.get<string>("rhinoInstallPath", "");
-	let rhinocodePath;
-	switch (os.platform()) {
-		case 'darwin':
-			rhinocodePath = `${rhinoPath}/Contents/Resources/bin/rhinocode`;
-			break;
-		case 'win32':
-			rhinocodePath = `${rhinoPath}/System/RhinoCode.exe`
-			break;
-	}
+	let rhinoPathConfig = configs.get<string>("rhinoInstallPath", "");
 
-	if (rhinocodePath != undefined) {
-		try {
-			rhinocodePath = path.normalize(rhinocodePath);
-			if (fs.statSync(rhinocodePath) != undefined) {
-				return rhinocodePath;
+	if (rhinoPathConfig != undefined) {
+		const rhinoPaths = rhinoPathConfig.split(';');
+		for (let p in rhinoPaths) {
+			let rhinoPath = rhinoPaths[p].trim();
+			let rhinocodePath;
+			switch (os.platform()) {
+				case 'darwin':
+					rhinocodePath = `${rhinoPath}/Contents/Resources/bin/rhinocode`;
+					break;
+				case 'win32':
+					rhinocodePath = `${rhinoPath}/RhinoCode.exe`
+					break;
 			}
-		}
-		catch (_ex) {
-			console.log(`Error checking rhinocode path ${rhinocodePath} | ${_ex}`)
+
+			if (rhinocodePath != undefined) {
+				try {
+					rhinocodePath = path.normalize(rhinocodePath);
+					if (fs.statSync(rhinocodePath) != undefined) {
+						return rhinocodePath;
+					}
+				}
+				catch (_ex) {
+					console.log(`Error checking rhinocode path ${rhinocodePath} | ${_ex}`)
+				}
+			}
 		}
 	}
 }
