@@ -13,9 +13,14 @@ export function activate(context: vscode.ExtensionContext) {
 		if (activeFile != undefined) {
 			const rhinos = getRhinoInstances();
 			const names = new Map(
-				rhinos.map(r =>
-					[`Rhino ${r.processId} - [${r.activeDoc.title} @ ${r.activeDoc.location}]`, r]
-				)
+				rhinos.map(r => {
+					if (r.activeDoc.title == undefined) {
+						return [`Rhino ${r.processId} - [Untitled - Not Saved]`, r]
+					}
+					else {
+						return [`Rhino ${r.processId} - [${r.activeDoc.title} @ ${r.activeDoc.location}]`, r]
+					}
+				})
 			);
 			vscode.window.showQuickPick([...names.keys()], { canPickMany: false })
 				.then((v) => {
