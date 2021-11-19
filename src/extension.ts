@@ -51,37 +51,17 @@ interface RhinoDocument {
 }
 
 function getRhinoInstances(): Array<RhinoInstance> {
-	const rhinos: Array<RhinoInstance> = [];
-
 	const rc = getRhinoCode();
 	if (rc != undefined) {
-		const stdout = cp.execSync(`${rc} list`);
-
-		console.log('stdout: ' + stdout);
-
-		const rhinoDefs = stdout.toString().trimEnd().split('\n').slice(1);
-		rhinoDefs.forEach(rd => {
-			const rdClean = rd.replace(/\s+/g, ' ').trim();
-			let [procId, pipeId, docTitle, docLoc] = rdClean.split(' ');
-			rhinos.push(
-				{
-					processId: parseInt(procId),
-					pipeId: pipeId,
-					activeDoc: {
-						title: docTitle,
-						location: docLoc
-					}
-				}
-			)
-		});
+		const stdout = cp.execSync(`${rc} list --json`);
+		return JSON.parse(stdout.toString());
 	}
 	else {
 		vscode.window.showInformationMessage(
 			"Can not find rhinocode. Make sure Rhino install path is set in this extension settings"
 		);
+		return [];
 	}
-
-	return rhinos;
 }
 
 function getRhinoCode(): string | void {
