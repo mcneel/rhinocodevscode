@@ -29,7 +29,8 @@
 		"commands": [
 			{
 				"command": "rhinocode.runinrhino",
-				"title": "Run In Rhino WIP"
+				"title": "Run In Rhino WIP",
+				"category": "Rhino"
 			}
 		],
 		"configuration": {
