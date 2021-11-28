@@ -22,13 +22,13 @@
 		"rhinoscript"
 	],
 	"activationEvents": [
-		"onCommand:rhinocode.runinrhino"
+		"onCommand:rhinocode.runInRhino"
 	],
 	"main": "./out/extension.js",
 	"contributes": {
 		"commands": [
 			{
-				"command": "rhinocode.runinrhino",
+				"command": "rhinocode.runInRhino",
 				"title": "Run In Rhino WIP",
 				"category": "Rhino"
 			}
