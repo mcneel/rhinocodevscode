@@ -44,8 +44,14 @@
 				"rhinocode.showActiveDocument": {
 					"title": "Show Active Document",
 					"type": "boolean",
-					"default": false,
+					"default": true,
 					"description": "Show name of active document in Rhino selector"
+				},
+				"rhinocode.showActiveDocumentPath": {
+					"title": "Show Active Document Path",
+					"type": "boolean",
+					"default": false,
+					"description": "Show path of active document in Rhino selector"
 				},
 				"rhinocode.showActiveViewport": {
 					"title": "Show Active Viewport",
@@ -54,16 +60,22 @@
 					"description": "Show name of active viewport in Rhino selector"
 				},
 				"rhinocode.showProcessId": {
-					"title": "Show Process Id",
+					"title": "Show Rhino Process Id",
 					"type": "boolean",
 					"default": false,
 					"description": "Show process id in Rhino selector"
 				},
 				"rhinocode.showProcessAge": {
-					"title": "Show Process Age",
+					"title": "Show Rhino Age",
+					"type": "boolean",
+					"default": true,
+					"description": "Show process age (time in use) in Rhino selector"
+				},
+				"rhinocode.showProcessFullVersion": {
+					"title": "Show Rhino Full Version",
 					"type": "boolean",
 					"default": false,
-					"description": "Show process age in Rhino selector"
+					"description": "Show full rhino version in Rhino selector"
 				}
 			}
 		}

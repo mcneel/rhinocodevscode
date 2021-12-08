@@ -17,25 +17,44 @@ export function activate(context: vscode.ExtensionContext) {
 
 		let configs = vscode.workspace.getConfiguration('rhinocode');
 		let showActiveDocument = configs.get<boolean>("showActiveDocument");
+		let showActiveDocumentPath = configs.get<boolean>("showActiveDocumentPath");
 		let showActiveViewport = configs.get<boolean>("showActiveViewport");
 		let showProcessId = configs.get<boolean>("showProcessId");
 		let showProcessAge = configs.get<boolean>("showProcessAge");
+		let showProcessFullVersion = configs.get<boolean>("showProcessFullVersion");
 
 		if (activeFile != undefined) {
 			const rhinos = getRhinoInstances();
 			if (rhinos.length > 0) {
 				const names = new Map(
 					rhinos.map(r => {
-						let title = `${r.processName} ${r.processVersion}`;
+						let title = r.processName;
+
+						if (showProcessFullVersion)
+							title += ` ${r.processVersion}`;
+						else {
+							const verisonNumbers = r.processVersion.split('.');
+							title += ` ${verisonNumbers[0]}.${verisonNumbers[1]}`;
+						}
+
 						if (showProcessId)
 							title += ` <${r.processId}>`;
 
 						if (showActiveDocument) {
 							if (r.activeDoc.title == undefined) {
-								title += ` - "Untitled - Not Saved"`;
+								title += ` - "Untitled"`;
 							}
 							else {
-								title += ` - "${r.activeDoc.title}" @ ${r.activeDoc.location}`;
+								title += ` - "${r.activeDoc.title}"`;
+							}
+						}
+
+						if (showActiveDocumentPath) {
+							if (r.activeDoc.title == undefined) {
+								title += ` - Not Saved`;
+							}
+							else {
+								title += ` - @ ${r.activeDoc.location}`;
 							}
 						}
 
