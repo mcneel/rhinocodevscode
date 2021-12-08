@@ -11,7 +11,7 @@ const minCLIVersion = "0.1.0";
 
 // this method is called when extension is activated
 export function activate(context: vscode.ExtensionContext) {
-	let disposable = vscode.commands.registerCommand('rhinocode.runinrhino', () => {
+	let disposable = vscode.commands.registerCommand('rhinocode.runInRhino', () => {
 		const activeFile = vscode.window.activeTextEditor?.document.uri.fsPath;
 		if (activeFile != undefined) {
 			const rhinos = getRhinoInstances();
