@@ -2,7 +2,7 @@
 	"name": "rhinocode",
 	"displayName": "RhinoCode",
 	"description": "RhinoCode interoperability extension",
-	"publisher": "Robert McNeel & Associates",
+	"publisher": "McNeel",
 	"license": "MIT",
 	"repository": {
 		"url": "https://github.com/mcneel/rhinocodevscode"
