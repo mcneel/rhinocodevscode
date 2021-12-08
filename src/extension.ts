@@ -7,23 +7,44 @@ import path = require('path');
 import fs = require('fs')
 import ver = require('compare-versions');
 
-const minCLIVersion = "0.1.0";
+const minCLIVersion = "0.2.0";
 
 // this method is called when extension is activated
 export function activate(context: vscode.ExtensionContext) {
 	let disposable = vscode.commands.registerCommand('rhinocode.runInRhino', () => {
 		const activeFile = vscode.window.activeTextEditor?.document.uri.fsPath;
+
+		let configs = vscode.workspace.getConfiguration('rhinocode');
+		let showActiveDocument = configs.get<boolean>("showActiveDocument");
+		let showActiveViewport = configs.get<boolean>("showActiveViewport");
+		let showProcessId = configs.get<boolean>("showProcessId");
+		let showProcessAge = configs.get<boolean>("showProcessAge");
+
 		if (activeFile != undefined) {
 			const rhinos = getRhinoInstances();
 			if (rhinos.length > 0) {
 				const names = new Map(
 					rhinos.map(r => {
-						if (r.activeDoc.title == undefined) {
-							return [`Rhino ${r.processId} - [Untitled - Not Saved]`, r]
+						let title = `${r.processName} ${r.processVersion}`;
+						if (showProcessId)
+							title += ` <${r.processId}>`;
+
+						if (showActiveDocument) {
+							if (r.activeDoc.title == undefined) {
+								title += ` - "Untitled - Not Saved"`;
+							}
+							else {
+								title += ` - "${r.activeDoc.title}" @ ${r.activeDoc.location}`;
+							}
 						}
-						else {
-							return [`Rhino ${r.processId} - [${r.activeDoc.title} @ ${r.activeDoc.location}]`, r]
-						}
+
+						if (showActiveViewport)
+							title += ` [${r.activeViewport}]`;
+
+						if (showProcessAge)
+							title += ` (${r.processAge} Minutes)`;
+
+						return [title, r]
 					})
 				);
 
@@ -52,9 +73,13 @@ export function activate(context: vscode.ExtensionContext) {
 export function deactivate() { }
 
 interface RhinoInstance {
-	readonly processId: number;
 	readonly pipeId: string;
+	readonly processId: number;
+	readonly processName: string;
+	readonly processVersion: string;
+	readonly processAge: number;
 	readonly activeDoc: RhinoDocument;
+	readonly activeViewport: string;
 }
 
 interface RhinoDocument {

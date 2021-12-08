@@ -7,7 +7,7 @@
 	"repository": {
 		"url": "https://github.com/mcneel/rhinocodevscode"
 	},
-	"version": "0.0.1",
+	"version": "0.0.2",
 	"icon": "rhinocode.png",
 	"engines": {
 		"vscode": "^1.62.0"
@@ -40,6 +40,30 @@
 					"type": "string",
 					"default": "",
 					"description": "Full install path of Rhino on your machine"
+				},
+				"rhinocode.showActiveDocument": {
+					"title": "Show Active Document",
+					"type": "boolean",
+					"default": false,
+					"description": "Show name of active document in Rhino selector"
+				},
+				"rhinocode.showActiveViewport": {
+					"title": "Show Active Viewport",
+					"type": "boolean",
+					"default": false,
+					"description": "Show name of active viewport in Rhino selector"
+				},
+				"rhinocode.showProcessId": {
+					"title": "Show Process Id",
+					"type": "boolean",
+					"default": false,
+					"description": "Show process id in Rhino selector"
+				},
+				"rhinocode.showProcessAge": {
+					"title": "Show Process Age",
+					"type": "boolean",
+					"default": false,
+					"description": "Show process age in Rhino selector"
 				}
 			}
 		}
