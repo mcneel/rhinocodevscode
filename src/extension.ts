@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
 
 import cp = require('child_process');
-import internal = require('stream');
 import os = require('os');
 import path = require('path');
 import fs = require('fs')
