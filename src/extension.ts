@@ -7,6 +7,8 @@ import path = require('path');
 import fs = require('fs')
 import ver = require('compare-versions');
 
+const timespan = require("timespan-parser");
+
 const minCLIVersion = "0.2.0";
 
 // this method is called when extension is activated
@@ -41,8 +43,10 @@ export function activate(context: vscode.ExtensionContext) {
 						if (showActiveViewport)
 							title += ` [${r.activeViewport}]`;
 
-						if (showProcessAge)
-							title += ` (${r.processAge} Minutes)`;
+						if (showProcessAge) {
+							let age = timespan.parse(`${r.processAge}m`);
+							title += ` (${timespan.getString(age, { abbv: false })})`;
+						}
 
 						return [title, r]
 					})
