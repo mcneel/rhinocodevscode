@@ -74,7 +74,7 @@ export function activate(context: vscode.ExtensionContext) {
 					.then((v) => {
 						if (v != undefined) {
 							const rhino = names.get(v);
-							const scriptCmd = `${getRhinoCode()} --rhino ${rhino?.pipeId} script \"${activeFile}\"`;
+							const scriptCmd = `"${getRhinoCode()}" --rhino ${rhino?.pipeId} script \"${activeFile}\"`;
 							console.log(scriptCmd)
 							cp.execSync(scriptCmd);
 						}
@@ -112,7 +112,7 @@ interface RhinoDocument {
 function getRhinoInstances(): Array<RhinoInstance> {
 	const rc = getRhinoCode();
 	if (rc != undefined) {
-		const stdout = cp.execSync(`${rc} list --json`);
+		const stdout = cp.execSync(`"${rc}" list --json`);
 		const rhinos: Array<RhinoInstance> = JSON.parse(stdout.toString());
 		if (rhinos.length == 0) {
 			vscode.window.showErrorMessage(
@@ -148,7 +148,7 @@ function getRhinoCode(): string | void {
 				try {
 					rhinocodePath = path.normalize(rhinocodePath);
 					if (fs.statSync(rhinocodePath) != undefined) {
-						const stdout = cp.execSync(`${rhinocodePath} --version`);
+						const stdout = cp.execSync(`"${rhinocodePath}" --version`);
 						if (ver.compare(stdout.toString().trimEnd(), minCLIVersion, '>=')) {
 							return rhinocodePath;
 						}
