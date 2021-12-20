@@ -48,6 +48,7 @@ type RhinoDocument = {
 const RHC_MIN_VER = "0.2.0";
 // default path of rhinocode cli binary
 const {
+	defaultName: RHC_DEFAULT_NAME,
 	defaultFolder: RHC_DEFAULT_FOLDER,
 	relativeBinPath: RHC_RELATIVE_BIN_PATH
 } = (function () {
@@ -55,18 +56,21 @@ const {
 		case 'darwin':
 			console.info("rhinocode: using default paths for \"darwin\"")
 			return {
+				defaultName: "rhinocode.exe",
 				defaultFolder: "/Applications/RhinoWIP.app",
 				relativeBinPath: "Contents/Resources/bin/rhinocode"
 			}
 		case 'win32':
 			console.info("rhinocode: using default paths for \"win32\"")
 			return {
+				defaultName: "RhinoCode.exe",
 				defaultFolder: "C:\\Program Files\\Rhino 8 WIP\\System",
-				relativeBinPath: "RhinoCode.exe"
+				relativeBinPath: "System\\RhinoCode.exe"
 			}
 		default:
 			console.error("rhinocode: invalid platform:", Os.platform())
 			return {
+				defaultName: "",
 				defaultFolder: "",
 				relativeBinPath: ""
 			}
@@ -109,6 +113,8 @@ function runInRhinoCommand() {
 		);
 		return;
 	}
+
+	console.info(`rhinocode: using rhinocode (${rhc.cliVersion}) \"${rhc.cliPath}\"`);
 
 	const rhcInstances = getRhinoInstances(rhc.cliPath);
 	// rhcInstances will never be an array of length 0
@@ -242,6 +248,7 @@ function getRhinoCode(): RhinoCodeBinary | null {
 		console.warn(
 			"rhinocode: multiple valid rhinocode applications found"
 		);
+		rhinoPaths.forEach(path => console.warn(`rhinocode: ${path}`));
 	}
 
 	const rhcPath = rhinoPaths[0];
@@ -283,16 +290,19 @@ function getRhinoCodePath(rhcDirectory: string): string | null {
 		return null;
 	}
 
-	const rhcPath = Path.join(rhcDirectory, RHC_RELATIVE_BIN_PATH)
+	var rhcPath: string;
+	rhcPath = Path.join(rhcDirectory, RHC_RELATIVE_BIN_PATH)
+	if (rhinoCodePathExists(rhcPath))
+		return rhcPath;
 
-	if (rhinoCodePathExists(rhcPath) === false) {
-		console.warn(
-			`rhinocode: ignored missing rhinocode binary "${rhcPath}"`
-		);
-		return null;
-	}
+	rhcPath = Path.join(rhcDirectory, RHC_DEFAULT_NAME)
+	if (rhinoCodePathExists(rhcPath))
+		return rhcPath;
 
-	return rhcPath;
+	console.warn(
+		`rhinocode: ignored missing rhinocode binary in "${rhcDirectory}"`
+	);
+	return null;
 
 	/** Like `fs.existsSync`, but impose an absolute path */
 	function rhinoCodePathExists(path: string): boolean {
