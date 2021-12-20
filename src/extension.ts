@@ -1,126 +1,343 @@
 import * as vscode from 'vscode';
 
-import cp = require('child_process');
-import internal = require('stream');
-import os = require('os');
-import path = require('path');
-import fs = require('fs')
-import ver = require('compare-versions');
+import * as Cp from 'child_process';
+import * as Os from 'os';
+import * as Path from 'path';
+import * as Fs from 'fs'
+import * as Ver from 'compare-versions';
+import { config } from 'process';
 
-const minCLIVersion = "0.1.0";
 
-// this method is called when extension is activated
+
+const Timespan = require("timespan-parser");
+
+
+// public =====================================================================
 export function activate(context: vscode.ExtensionContext) {
-	let disposable = vscode.commands.registerCommand('rhinocode.runInRhino', () => {
-		const activeFile = vscode.window.activeTextEditor?.document.uri.fsPath;
-		if (activeFile != undefined) {
-			const rhinos = getRhinoInstances();
-			if (rhinos.length > 0) {
-				const names = new Map(
-					rhinos.map(r => {
-						if (r.activeDoc.title == undefined) {
-							return [`Rhino ${r.processId} - [Untitled - Not Saved]`, r]
-						}
-						else {
-							return [`Rhino ${r.processId} - [${r.activeDoc.title} @ ${r.activeDoc.location}]`, r]
-						}
-					})
-				);
-
-				vscode.window.showQuickPick([...names.keys()], { canPickMany: false })
-					.then((v) => {
-						if (v != undefined) {
-							const rhino = names.get(v);
-							const scriptCmd = `${getRhinoCode()} --rhino ${rhino?.pipeId} script \"${activeFile}\"`;
-							console.log(scriptCmd)
-							cp.execSync(scriptCmd);
-						}
-					});
-			}
-		}
-		else {
-			vscode.window.showInformationMessage(
-				"There are no active scripts open"
-			);
-		}
-	});
-
+	let disposable =
+		vscode.commands.registerCommand('rhinocode.runInRhino', runInRhinoCommand);
 	context.subscriptions.push(disposable);
 }
 
-// this method is called when extension is deactivated
 export function deactivate() { }
 
-interface RhinoInstance {
-	readonly processId: number;
-	readonly pipeId: string;
-	readonly activeDoc: RhinoDocument;
+// private ====================================================================
+
+// models
+type RhinoCodeBinary = {
+	readonly cliPath: string;
+	readonly cliVersion: string;
+	readonly isRecent: boolean;
 }
 
-interface RhinoDocument {
+class PluginConfigs {
+	readonly showActiveDocument: boolean | undefined;
+	readonly showActiveDocumentPath: boolean | undefined;
+	readonly showActiveViewport: boolean | undefined;
+	readonly showProcessId: boolean | undefined;
+	readonly showProcessAge: boolean | undefined;
+	readonly showProcessFullVersion: boolean | undefined;
+
+	constructor(configs: vscode.WorkspaceConfiguration) {
+		this.showActiveDocument = configs.get<boolean>("showActiveDocument");
+		this.showActiveDocumentPath = configs.get<boolean>("showActiveDocumentPath");
+		this.showActiveViewport = configs.get<boolean>("showActiveViewport");
+		this.showProcessId = configs.get<boolean>("showProcessId");
+		this.showProcessAge = configs.get<boolean>("showProcessAge");
+		this.showProcessFullVersion = configs.get<boolean>("showProcessFullVersion");
+	}
+}
+
+type RhinoInstance = {
+	readonly pipeId: string;
+	readonly processId: number;
+	readonly processName: string;
+	readonly processVersion: string;
+	readonly processAge: number;
+	readonly activeDoc: RhinoDocument;
+	readonly activeViewport: string;
+}
+
+type RhinoDocument = {
 	readonly title: string;
 	readonly location: string;
 }
 
-function getRhinoInstances(): Array<RhinoInstance> {
-	const rc = getRhinoCode();
-	if (rc != undefined) {
-		const stdout = cp.execSync(`${rc} list --json`);
-		const rhinos: Array<RhinoInstance> = JSON.parse(stdout.toString());
-		if (rhinos.length == 0) {
-			vscode.window.showErrorMessage(
-				"There are no instance of Rhino WIP running"
+// minimum rhinocode cli version
+const RHC_MIN_VER = "0.2.0";
+// default path of rhinocode cli binary
+const {
+	defaultName: RHC_DEFAULT_NAME,
+	defaultFolder: RHC_DEFAULT_FOLDER,
+	relativeBinPath: RHC_RELATIVE_BIN_PATH
+} = (function () {
+	switch (Os.platform()) {
+		case 'darwin':
+			console.info("rhinocode: using default paths for \"darwin\"")
+			return {
+				defaultName: "rhinocode.exe",
+				defaultFolder: "/Applications/RhinoWIP.app",
+				relativeBinPath: "Contents/Resources/bin/rhinocode"
+			}
+		case 'win32':
+			console.info("rhinocode: using default paths for \"win32\"")
+			return {
+				defaultName: "RhinoCode.exe",
+				defaultFolder: "C:\\Program Files\\Rhino 8 WIP\\System",
+				relativeBinPath: "System\\RhinoCode.exe"
+			}
+		default:
+			console.error("rhinocode: invalid platform:", Os.platform())
+			return {
+				defaultName: "",
+				defaultFolder: "",
+				relativeBinPath: ""
+			}
+	}
+})()
+
+
+// "Run in Rhino" command implementation
+function runInRhinoCommand() {
+	const activeFile = vscode.window.activeTextEditor?.document.uri.fsPath;
+
+
+	const configs = new PluginConfigs(
+		vscode.workspace.getConfiguration('rhinocode')
+	);
+
+	if (typeof activeFile !== "string" || activeFile.trim() == "") {
+		vscode.window.showInformationMessage(
+			"There are no active scripts open"
+		);
+		return;
+	}
+
+	const rhc = getRhinoCode();
+	if (rhc == null) {
+		vscode.window.showErrorMessage(
+			"Could not find rhinocode. Make sure Rhino WIP is installed. " +
+			"If so, set the 'rhinoInstallPath' setting"
+		);
+		return;
+	}
+
+	if (!rhc.isRecent) {
+		vscode.window.showErrorMessage(
+			`Incompatible rhinocode binary is found at ${rhc.cliPath}\n` +
+			`Expected: ${RHC_MIN_VER} Found: ${rhc.cliVersion}`
+		);
+		return;
+	}
+
+	console.info(`rhinocode: using rhinocode (${rhc.cliVersion}) \"${rhc.cliPath}\"`);
+
+	const rhcInstances = getRhinoInstances(rhc.cliPath);
+	// rhcInstances will never be an array of length 0
+	if (rhcInstances == null) {
+		vscode.window.showErrorMessage(
+			"There are no instance of Rhino WIP running"
+		);
+		return;
+	}
+
+	// automatically use the only available rhino instance and don't prompt user
+	if (rhcInstances.length === 1) {
+		runScript(rhc.cliPath, rhcInstances[0], activeFile);
+		return;
+	}
+
+	// otherwise prep a list of rhino instances,
+	const processIds = new Map(
+		rhcInstances.map(r => [r.processId, r] as [number, RhinoInstance])
+	);
+
+	const processTitles = new Map(
+		rhcInstances.map(r => {
+			let title = r.processName;
+
+			if (configs.showProcessFullVersion)
+				title += ` ${r.processVersion}`;
+			else {
+				const verisonNumbers = r.processVersion.split('.');
+				title += ` ${verisonNumbers[0]}.${verisonNumbers[1]}`;
+			}
+
+			if (configs.showProcessId)
+				title += ` <${r.processId}>`;
+
+			if (configs.showActiveDocument)
+				title += r.activeDoc.title
+					? ` - "${r.activeDoc.title}"`
+					: ' - "Untitled"';
+
+			if (configs.showActiveDocumentPath)
+				title += r.activeDoc.title
+					? ` - @ ${r.activeDoc.location}`
+					: " - Not Saved";
+
+			if (configs.showActiveViewport)
+				title += ` [${r.activeViewport}]`;
+
+			if (configs.showProcessAge) {
+				if (r.processAge < 1)
+					title += " (Started Just Now)";
+				else {
+					let age = Timespan.parse(`${r.processAge}m`);
+					title += ` (${Timespan.getString(age, { abbv: false })})`;
+				}
+			}
+
+			return [r.processId, title] as [number, string]
+		})
+	);
+	// and prompt user to select one
+	vscode.window.showQuickPick([...processTitles.values()], { canPickMany: false })
+		.then((v) => {
+			if (v) {
+				processTitles.forEach((title, pid) => {
+					if (v == title && processIds.has(pid)) {
+						// and run active script with the selected rhino
+						runScript(rhc.cliPath, processIds.get(pid)!, activeFile)
+					}
+				})
+			}
+		});
+
+
+	function runScript(rhcPath: string, rhino: RhinoInstance, scriptPath: string) {
+		const scriptCmd = `"${rhcPath}" --rhino ${rhino?.pipeId} script \"${scriptPath}\"`;
+		try {
+			console.log(`rhinocode: running rhinocode script \"${scriptCmd}\"`)
+			Cp.execSync(scriptCmd);
+		} catch (error) {
+			console.error(
+				`rhinocode: unexpected rhinocode error: "${scriptCmd}"\n`
 			);
 		}
-		return rhinos;
-	}
-	else {
-		return [];
 	}
 }
 
-function getRhinoCode(): string | void {
-	let configs = vscode.workspace.getConfiguration('rhinocode');
-	let rhinoPathConfig = configs.get<string>("rhinoInstallPath", "");
 
-	if (rhinoPathConfig != undefined) {
-		const rhinoPaths = rhinoPathConfig.split(';');
-		for (let p in rhinoPaths) {
-			let rhinoPath = rhinoPaths[p].trim();
-			let rhinocodePath;
-			switch (os.platform()) {
-				case 'darwin':
-					rhinocodePath = `${rhinoPath}/Contents/Resources/bin/rhinocode`;
-					break;
-				case 'win32':
-					rhinocodePath = `${rhinoPath}/RhinoCode.exe`
-					break;
-			}
+// get information on running instances of rhino using given rhinocode binary
+function getRhinoInstances(rhcPath: string): Array<RhinoInstance> | null {
+	if (typeof rhcPath !== "string")
+		return null;
 
-			if (rhinocodePath != undefined) {
-				try {
-					rhinocodePath = path.normalize(rhinocodePath);
-					if (fs.statSync(rhinocodePath) != undefined) {
-						const stdout = cp.execSync(`${rhinocodePath} --version`);
-						if (ver.compare(stdout.toString().trimEnd(), minCLIVersion, '>=')) {
-							return rhinocodePath;
-						}
-						else {
-							vscode.window.showErrorMessage(
-								`Minimum required rhinocode is \"${minCLIVersion}\". Please install the latest Rhino WIP`
-							);
-						}
-					}
-					else {
-						vscode.window.showErrorMessage(
-							"Can not find rhinocode. Make sure Rhino install path is set in this extension settings"
-						);
-					}
-				}
-				catch (_ex) {
-					console.log(`Error checking rhinocode path ${rhinocodePath} | ${_ex}`)
-				}
-			}
+	var rhinos: Array<RhinoInstance>
+
+	const cmd = `"${rhcPath}" list --json`
+	try {
+		const stdout = Cp.execSync(cmd);
+		rhinos = JSON.parse(stdout.toString());
+	} catch (error) {
+		console.error(
+			`rhinocode: unexpected error: ${cmd}`
+		);
+		return null;
+	}
+
+	if (Array.isArray(rhinos) === false) {
+		console.error(
+			`rhinocode: unexpected array: "${cmd}" --version\n`,
+			"receive: " + (typeof rhinos)
+		);
+		return null;
+	}
+
+	if (rhinos.length == 0)
+		return null;
+
+	// rhino instances can change between calls so it is better
+	// to keep the rhino list ordered in the ui
+	// keep the most recent one (larger pid) first
+	return rhinos.sort((a, b) => a.processAge - b.processAge);
+}
+
+
+// ensure a valid rhincode binary path or null if no installation found
+function getRhinoCode(): RhinoCodeBinary | null {
+	const configs = vscode.workspace.getConfiguration('rhinocode');
+	const rhinoPathConfig = configs.get<string>("rhinoInstallPath", "");
+
+	const rhinoPaths = (rhinoPathConfig == "" ?
+		RHC_DEFAULT_FOLDER : `${rhinoPathConfig};${RHC_DEFAULT_FOLDER}`)
+		.split(';')
+		.map(getRhinoCodePath)
+		.filter(rhc => rhc != null) as string[];
+
+	if (rhinoPaths.length == 0)
+		return null;
+
+	if (rhinoPaths.length > 1) {
+		console.warn(
+			"rhinocode: multiple valid rhinocode applications found"
+		);
+		rhinoPaths.forEach(path => console.warn(`rhinocode: ${path}`));
+	}
+
+	const rhcPath = rhinoPaths[0];
+	// check rhinocode version
+	try {
+		const stdout = Cp.execSync(`"${rhcPath}" --version`);
+		const cliVersion = stdout.toString().trimEnd();
+
+		if (Ver.compare(cliVersion, RHC_MIN_VER, '>='))
+			return { cliPath: rhcPath, cliVersion: cliVersion, isRecent: true };
+		else {
+			console.warn(
+				`rhinocode: invalid rhinocode version '${cliVersion}' ` +
+				`@ "${rhcPath}", ` +
+				`expected '>= ${RHC_MIN_VER}'`
+			);
+			return { cliPath: rhcPath, cliVersion: cliVersion, isRecent: false };
+		}
+	}
+	catch (error) {
+		console.error(
+			`rhinocode: unexpected rhinocode error: "${rhcPath}" --version`,
+			error
+		);
+		return null;
+	}
+}
+
+
+// find path of rhinocode binary in given directory, or null if not found
+function getRhinoCodePath(rhcDirectory: string): string | null {
+
+	// ignore all invalid paths in case the user shares the settings
+	// between different platforms or has legacy paths
+	if (typeof rhcDirectory != "string" || rhcDirectory.trim() == "") {
+		console.warn(
+			`rhinocode: ignored missing rhinocode directory "${rhcDirectory}"`
+		);
+		return null;
+	}
+
+	var rhcPath: string;
+	rhcPath = Path.join(rhcDirectory, RHC_RELATIVE_BIN_PATH)
+	if (rhinoCodePathExists(rhcPath))
+		return rhcPath;
+
+	rhcPath = Path.join(rhcDirectory, RHC_DEFAULT_NAME)
+	if (rhinoCodePathExists(rhcPath))
+		return rhcPath;
+
+	console.warn(
+		`rhinocode: ignored missing rhinocode binary in "${rhcDirectory}"`
+	);
+	return null;
+
+	/** Like `fs.existsSync`, but impose an absolute path */
+	function rhinoCodePathExists(path: string): boolean {
+		if (Path.isAbsolute(path) === false)
+			return false;
+
+		try {
+			return Fs.statSync(path) != undefined;
+		} catch (error) {
+			return false
 		}
 	}
 }
