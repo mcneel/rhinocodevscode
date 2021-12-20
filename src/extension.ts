@@ -5,6 +5,7 @@ import * as Os from 'os';
 import * as Path from 'path';
 import * as Fs from 'fs'
 import * as Ver from 'compare-versions';
+import { config } from 'process';
 
 
 
@@ -27,6 +28,24 @@ type RhinoCodeBinary = {
 	readonly cliPath: string;
 	readonly cliVersion: string;
 	readonly isRecent: boolean;
+}
+
+class PluginConfigs {
+	readonly showActiveDocument: boolean | undefined;
+	readonly showActiveDocumentPath: boolean | undefined;
+	readonly showActiveViewport: boolean | undefined;
+	readonly showProcessId: boolean | undefined;
+	readonly showProcessAge: boolean | undefined;
+	readonly showProcessFullVersion: boolean | undefined;
+
+	constructor(configs: vscode.WorkspaceConfiguration) {
+		this.showActiveDocument = configs.get<boolean>("showActiveDocument");
+		this.showActiveDocumentPath = configs.get<boolean>("showActiveDocumentPath");
+		this.showActiveViewport = configs.get<boolean>("showActiveViewport");
+		this.showProcessId = configs.get<boolean>("showProcessId");
+		this.showProcessAge = configs.get<boolean>("showProcessAge");
+		this.showProcessFullVersion = configs.get<boolean>("showProcessFullVersion");
+	}
 }
 
 type RhinoInstance = {
@@ -82,13 +101,10 @@ const {
 function runInRhinoCommand() {
 	const activeFile = vscode.window.activeTextEditor?.document.uri.fsPath;
 
-	const configs = vscode.workspace.getConfiguration('rhinocode');
-	const showActiveDocument = configs.get<boolean>("showActiveDocument");
-	const showActiveDocumentPath = configs.get<boolean>("showActiveDocumentPath");
-	const showActiveViewport = configs.get<boolean>("showActiveViewport");
-	const showProcessId = configs.get<boolean>("showProcessId");
-	const showProcessAge = configs.get<boolean>("showProcessAge");
-	const showProcessFullVersion = configs.get<boolean>("showProcessFullVersion");
+
+	const configs = new PluginConfigs(
+		vscode.workspace.getConfiguration('rhinocode')
+	);
 
 	if (typeof activeFile !== "string" || activeFile.trim() == "") {
 		vscode.window.showInformationMessage(
@@ -132,34 +148,38 @@ function runInRhinoCommand() {
 	}
 
 	// otherwise prep a list of rhino instances,
-	const names = new Map(
+	const processIds = new Map(
+		rhcInstances.map(r => [r.processId, r] as [number, RhinoInstance])
+	);
+
+	const processTitles = new Map(
 		rhcInstances.map(r => {
 			let title = r.processName;
 
-			if (showProcessFullVersion)
+			if (configs.showProcessFullVersion)
 				title += ` ${r.processVersion}`;
 			else {
 				const verisonNumbers = r.processVersion.split('.');
 				title += ` ${verisonNumbers[0]}.${verisonNumbers[1]}`;
 			}
 
-			if (showProcessId)
+			if (configs.showProcessId)
 				title += ` <${r.processId}>`;
 
-			if (showActiveDocument)
+			if (configs.showActiveDocument)
 				title += r.activeDoc.title
 					? ` - "${r.activeDoc.title}"`
 					: ' - "Untitled"';
 
-			if (showActiveDocumentPath)
+			if (configs.showActiveDocumentPath)
 				title += r.activeDoc.title
 					? ` - @ ${r.activeDoc.location}`
 					: " - Not Saved";
 
-			if (showActiveViewport)
+			if (configs.showActiveViewport)
 				title += ` [${r.activeViewport}]`;
 
-			if (showProcessAge) {
+			if (configs.showProcessAge) {
 				if (r.processAge < 1)
 					title += " (Started Just Now)";
 				else {
@@ -168,15 +188,20 @@ function runInRhinoCommand() {
 				}
 			}
 
-			return [title, r] as [string, RhinoInstance]
+			return [r.processId, title] as [number, string]
 		})
 	);
 	// and prompt user to select one
-	vscode.window.showQuickPick([...names.keys()], { canPickMany: false })
+	vscode.window.showQuickPick([...processTitles.values()], { canPickMany: false })
 		.then((v) => {
-			if (v && names.has(v))
-				// and run active script with the selected rhino
-				runScript(rhc.cliPath, names.get(v)!, activeFile)
+			if (v) {
+				processTitles.forEach((title, pid) => {
+					if (v == title && processIds.has(pid)) {
+						// and run active script with the selected rhino
+						runScript(rhc.cliPath, processIds.get(pid)!, activeFile)
+					}
+				})
+			}
 		});
 
 
